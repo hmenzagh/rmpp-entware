@@ -19,7 +19,6 @@
 - [Managing Updates](#managing-updates)
   - [After a Firmware Update](#after-a-firmware-update)
 - [Cleanup](#cleanup)
-- [Real-World Use Cases](#real-world-use-cases)
 - [Additional Information](#additional-information)
   - [PATH Configuration](#path-configuration)
   - [Toltec Compatibility](#toltec-compatibility)
@@ -47,7 +46,7 @@ Before installing reMarkable Entware, ensure you have the following:
 
 ## Installation
 
-Follow these steps to install reMarkable Entware on your device.
+Follow these steps to install RMPP Entware on your device.
 
 ### Step 1: Connect Your reMarkable
 
