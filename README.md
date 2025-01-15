@@ -1,3 +1,4 @@
+[![rmpp](https://img.shields.io/badge/rMPP-supported-green)](https://remarkable.com/store/overview/remarkable-paper-pro)
 # RMPP Entware
 
 **RMPP Entware** allows you to install additional software packages from the [Entware](https://github.com/Entware/Entware) repositories on your reMarkable device. This enhances your device's functionality through a lightweight package manager designed for embedded systems.
