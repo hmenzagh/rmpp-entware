@@ -270,7 +270,9 @@ reenable_entware() {
 Description=Bind mount over /opt to give Entware more space
 DefaultDependencies=no
 Conflicts=umount.target
-Before=local-fs.target umount.target
+After=home.mount
+Requires=home.mount
+BindsTo=home.mount
 
 [Mount]
 What=/home/root/.entware
@@ -279,7 +281,7 @@ Type=none
 Options=bind
 
 [Install]
-WantedBy=local-fs.target
+WantedBy=multi-user.target
 EOF
 
     # Reload systemd configuration
