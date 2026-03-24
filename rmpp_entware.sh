@@ -133,6 +133,28 @@ verify_checksum() {
     fi
 }
 
+# Write the systemd mount unit file for /opt
+write_opt_mount_unit() {
+    cat >/etc/systemd/system/opt.mount <<EOF
+[Unit]
+Description=Bind mount over /opt to give Entware more space
+DefaultDependencies=no
+Conflicts=umount.target
+After=home.mount
+Requires=home.mount
+BindsTo=home.mount
+
+[Mount]
+What=/home/root/.entware
+Where=/opt
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
 # Cleanup function on error or abort
 cleanup() {
     set +e
@@ -265,24 +287,7 @@ reenable_entware() {
 
     # Create the systemd mount unit for /opt
     echo "Creating systemd unit for /opt mount..."
-    cat >/etc/systemd/system/opt.mount <<EOF
-[Unit]
-Description=Bind mount over /opt to give Entware more space
-DefaultDependencies=no
-Conflicts=umount.target
-After=home.mount
-Requires=home.mount
-BindsTo=home.mount
-
-[Mount]
-What=/home/root/.entware
-Where=/opt
-Type=none
-Options=bind
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    write_opt_mount_unit
 
     # Reload systemd configuration
     echo "Reloading systemd configuration..."
@@ -418,25 +423,8 @@ fi
 mkdir -p /opt /home/root/.entware
 
 # Create systemd mount unit for /opt
-cat >/etc/systemd/system/opt.mount <<EOF
-[Unit]
-Description=Bind mount over /opt to give Entware more space
-DefaultDependencies=no
-Conflicts=umount.target
-After=home.mount
-Requires=home.mount
-BindsTo=home.mount
-
-[Mount]
-What=/home/root/.entware
-Where=/opt
-Type=none
-Options=bind
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
+echo "Creating systemd unit for /opt mount..."
+write_opt_mount_unit
 systemctl daemon-reload
 systemctl enable opt.mount
 systemctl start opt.mount
