@@ -260,17 +260,21 @@ cleanup() {
             echo "Removed $ENTWARE_PROFILE."
         fi
 
-        # Remove persistent entware block from .profile
-        PERSISTENT_PROFILE="/home/root/.profile"
-        if [ -f "$PERSISTENT_PROFILE" ]; then
-            sed -i '/# >>> entware >>>/,/# <<< entware <<</d' "$PERSISTENT_PROFILE"
-            echo "Removed entware block from $PERSISTENT_PROFILE."
-            # Remove .profile if it's now empty
-            if [ ! -s "$PERSISTENT_PROFILE" ]; then
-                rm -f "$PERSISTENT_PROFILE"
-                echo "Removed empty $PERSISTENT_PROFILE."
+        # Remove entware entries from .profile and .bashrc
+        # Handles both new-style (marker block) and old-style (bare PATH line)
+        PATH_ENTRY='export PATH=/opt/bin:/opt/sbin:$PATH'
+        for RCFILE in /home/root/.profile /home/root/.bashrc; do
+            if [ -f "$RCFILE" ]; then
+                sed -i '/# >>> entware >>>/,/# <<< entware <<</d' "$RCFILE"
+                sed -i "\|$PATH_ENTRY|d" "$RCFILE"
+                echo "Removed entware entries from $RCFILE."
+                # Remove file if it's now empty
+                if [ ! -s "$RCFILE" ]; then
+                    rm -f "$RCFILE"
+                    echo "Removed empty $RCFILE."
+                fi
             fi
-        fi
+        done
 
         # Restore filesystem mount options
         restore_filesystem_state
