@@ -104,6 +104,61 @@ add_to_path() {
     fi
 }
 
+# Write a persistent profile that auto-re-enables Entware on login after reboot.
+# On RMPP devices the root filesystem is reset on reboot, so /etc/systemd/system/opt.mount
+# and /etc/profile.d/entware.sh are lost. /home/root/.profile persists because it lives
+# on the /home partition.
+write_persistent_profile() {
+    local PROFILE="/home/root/.profile"
+    local MARKER_START="# >>> entware >>>"
+    local MARKER_END="# <<< entware <<<"
+
+    # Remove any existing entware block
+    if [ -f "$PROFILE" ]; then
+        sed -i "/$MARKER_START/,/$MARKER_END/d" "$PROFILE"
+    fi
+
+    cat >>"$PROFILE" <<'PROFILEEOF'
+# >>> entware >>>
+# Auto-reenable Entware after reboot (root filesystem is ephemeral on RMPP)
+if [ -d /home/root/.entware/bin ] && ! mountpoint -q /opt 2>/dev/null; then
+    mount -o remount,rw / 2>/dev/null
+    mkdir -p /opt
+    mount --bind /home/root/.entware /opt 2>/dev/null
+    cat >/etc/systemd/system/opt.mount <<'UNIT'
+[Unit]
+Description=Bind mount over /opt to give Entware more space
+DefaultDependencies=no
+Conflicts=umount.target
+After=home.mount
+Requires=home.mount
+BindsTo=home.mount
+
+[Mount]
+What=/home/root/.entware
+Where=/opt
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload 2>/dev/null
+    systemctl enable opt.mount 2>/dev/null
+    if [ -d /etc/profile.d ]; then
+        echo 'export PATH=/opt/bin:/opt/sbin:$PATH' >/etc/profile.d/entware.sh
+    fi
+    mount -o remount,ro / 2>/dev/null
+fi
+if [ -d /opt/bin ]; then
+    export PATH=/opt/bin:/opt/sbin:$PATH
+fi
+# <<< entware <<<
+PROFILEEOF
+
+    echo "Created persistent profile at $PROFILE (survives reboots)."
+}
+
 # Checksum function
 verify_checksum() {
     local file="$1"
@@ -194,11 +249,6 @@ cleanup() {
         fi
         rm -rf /opt /home/root/.entware
 
-        # Remove symbolic links in /opt/etc
-        for file in passwd group shells shadow gshadow localtime; do
-            rm -f "/opt/etc/$file"
-        done
-
         # Remove PATH modifications
         echo "Removing PATH modifications..."
 
@@ -210,23 +260,17 @@ cleanup() {
             echo "Removed $ENTWARE_PROFILE."
         fi
 
-        # Remove user-specific PATH modifications
-        PATH_ENTRY='export PATH=/opt/bin:/opt/sbin:\$PATH'
-        USER_NAME=${SUDO_USER:-$(whoami)}
-        USER_HOME=$(eval echo "~$USER_NAME")
-        USER_PROFILE="$USER_HOME/.profile"
-        USER_BASHRC="$USER_HOME/.bashrc"
-
-        remove_path_entry() {
-            TARGET_FILE=$1
-            if [ -f "$TARGET_FILE" ] && [ -w "$TARGET_FILE" ]; then
-                sed -i "\|$PATH_ENTRY|d" "$TARGET_FILE"
-                echo "Removed PATH modification from $TARGET_FILE."
+        # Remove persistent entware block from .profile
+        PERSISTENT_PROFILE="/home/root/.profile"
+        if [ -f "$PERSISTENT_PROFILE" ]; then
+            sed -i '/# >>> entware >>>/,/# <<< entware <<</d' "$PERSISTENT_PROFILE"
+            echo "Removed entware block from $PERSISTENT_PROFILE."
+            # Remove .profile if it's now empty
+            if [ ! -s "$PERSISTENT_PROFILE" ]; then
+                rm -f "$PERSISTENT_PROFILE"
+                echo "Removed empty $PERSISTENT_PROFILE."
             fi
-        }
-
-        remove_path_entry "$USER_PROFILE"
-        remove_path_entry "$USER_BASHRC"
+        fi
 
         # Restore filesystem mount options
         restore_filesystem_state
@@ -300,6 +344,9 @@ reenable_entware() {
     # Start the opt.mount service to bind /opt immediately
     echo "Starting opt.mount service..."
     systemctl start opt.mount
+
+    # Ensure persistent profile exists for future reboots
+    write_persistent_profile
 
     echo ""
     echo "Info: Entware has been successfully re-enabled."
@@ -537,37 +584,21 @@ else
 fi
 
 if [ "$answer" = "y" ]; then
+    # Create ephemeral system-wide PATH (will be recreated by .profile on next reboot)
     SYSTEM_PROFILE_D="/etc/profile.d"
     ENTWARE_PROFILE="$SYSTEM_PROFILE_D/entware.sh"
     if [ -d "$SYSTEM_PROFILE_D" ] && [ -w "$SYSTEM_PROFILE_D" ]; then
         echo "Creating $ENTWARE_PROFILE to update system-wide PATH."
         echo 'export PATH=/opt/bin:/opt/sbin:$PATH' >"$ENTWARE_PROFILE"
-    else
-        echo "Cannot write to $SYSTEM_PROFILE_D. Skipping system-wide PATH update."
     fi
 
-    USER_NAME=${SUDO_USER:-$(whoami)}
-    USER_HOME=$(eval echo "~$USER_NAME")
-    USER_PROFILE="$USER_HOME/.profile"
-    USER_BASHRC="$USER_HOME/.bashrc"
-
-    if [ -w "$USER_PROFILE" ]; then
-        add_to_path "$USER_PROFILE"
-    elif [ -w "$USER_BASHRC" ]; then
-        add_to_path "$USER_BASHRC"
-    else
-        echo "Cannot write to $USER_PROFILE or $USER_BASHRC. Skipping user-specific PATH update."
-    fi
+    # Write persistent profile that survives reboots
+    write_persistent_profile
 
     echo "PATH updated. Please reload your shell or log out and back in for changes to take effect."
 else
     echo "Skipping PATH update as per user request."
 fi
-
-echo ""
-echo "If PATH was not updated automatically, add the following to ~/.bashrc or ~/.profile:"
-echo "export PATH=/opt/bin:/opt/sbin:\$PATH"
-echo "Then run 'source ~/.bashrc' or 'source ~/.profile' to apply."
 echo ""
 echo "Manage packages using Opkg:"
 echo "  opkg update"
